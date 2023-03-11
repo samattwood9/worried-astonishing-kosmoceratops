@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>worried-astonoshing-kosmocertops</title>
+    <link href="style.css" rel="stylesheet" />
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="margin">
+      This glitch shows the effects of an evolutionary algorithm on a population
+      of squares. At each generation, the squares that are closest to the target
+      color (choose below) are selected and used to create the next generation of squares.
+    </p>
+
+    <input type="text" value="#71ffc4" />
+
+    <canvas id="canvas"> </canvas>
+
+    <!-- ******************* -->
+    <!-- color picker scipts -->
+    <!-- ******************* -->
+
+    <script src="color-picker.min.js"></script>
+    <script>
+      const picker = new CP(document.querySelector("input"));
+
+      picker.on("change", function (r, g, b, a) {
+        gen = 0;
+        this.source.value = this.color(r, g, b, 1);
+        this.source.style.borderColor =
+          "rgba(" + r + ", " + g + ", " + b + ", 1)";
+      });
+
+      function onChange() {
+        picker.set.apply(picker, CP.HEX(this.value)).enter(container);
+      }
+    </script>
+
+    <!-- ********************* -->
+    <!-- evolved colors script -->
+    <!-- ********************* -->
+
+    <script>
+      let canvas;
+      let ctx;
+      let appWidth;
+      let appHeight;
+
+      let columns;
+      let rows;
+      let size;
+
+      let offsetX;
+      let offsetY;
+
+      let targetColor;
+      let targetRed;
+      let targetBlue;
+      let targetGreen;
+
+      // EA params
+      let mutationSet = [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+      ];
+      let gen = 0;
+      let gens = 250;
+      let popSize = 64;
+
+      window.onload = function (event) {
+        sizeCanvas();
+        initPop();
+      };
+
+      function get_target() {
+        targetColor = picker.source.value;
+
+        // extract target red, green, and blue values
+        targetRed = parseInt(targetColor.substring(1, 3), 16);
+        targetGreen = parseInt(targetColor.substring(3, 5), 16);
+        targetBlue = parseInt(targetColor.substring(5), 16);
+
+        return targetRed, targetGreen, targetBlue;
+      }
+
+      function sizeCanvas() {
+        appWidth = window.innerWidth;
+        appHeight = window.innerHeight;
+        canvas = document.getElementById("canvas");
+        ctx = SETUP_CANVAS({ canvas: canvas, bgColor: "#f5f5dc" });
+
+        // NOTE: cols and rows are currently hard coded and should be changed based on a popSize (which should be a sq. no)
+        columns = 8;
+        rows = 8;
+        size = 50;
+
+        offsetX = (appWidth - columns * size) / 2;
+        offsetY = 50;
+      }
+
+      function randomHex() {
+        const hexMax = 256 * 256 * 256;
+        return (
+          "#" +
+          Math.floor(Math.random() * hexMax)
+            .toString(16)
+            .toUpperCase()
+            .padStart(6, "0")
+        );
+      }
+
+      function initPop() {
+        let colors = [];
+        for (var i = 1; i < popSize + 1; i++) {
+          let color = {
+            value: randomHex(),
+            fitness: 0,
+          };
+          colors.push(color);
+        }
+
+        drawSet(colors);
+      }
+
+      function drawSet(responseJson) {
+        ctx = SETUP_CANVAS({ canvas: canvas, bgColor: "#f5f5dc" });
+
+        responseJson.forEach(function (color, count) {
+          drawPoint(ctx, color, count);
+        });
+
+        targetRed, targetGreen, (targetBlue = get_target());
+
+        evolve(ctx, responseJson);
+      }
+
+      function drawPoint(ctx, color, count) {
+        let row = Math.floor(count / rows);
+        let column = count % columns;
+
+        ctx.fillStyle = color.value;
+        ctx.beginPath();
+        ctx.rect(row * size + offsetX, column * size + offsetY, size, size);
+
+        ctx.fill();
+      }
+
+      function evolve(ctx, colors) {
+        setTimeout(function () {
+          colors = evolveNextGeneration(colors);
+
+          colors.forEach(function (color, count) {
+            drawPoint(ctx, color, count);
+          });
+
+          gen++;
+          if (gen < gens) {
+            evolve(ctx, colors);
+          }
+        }, 500);
+      }
+
+      function mutate(color) {
+        let index = Math.ceil(Math.random() * color.length) - 1;
+        if (index == 0) return color;
+
+        let oldChar = color[index];
+        let oldIndex = mutationSet.findIndex(function (char) {
+          return char == oldChar;
+        });
+
+        let newIndex = oldIndex;
+        if (oldIndex == 0) {
+          newIndex++;
+        } else if (oldIndex == mutationSet.length - 1) {
+          newIndex--;
+        } else {
+          if (Math.random() > 0.5) {
+            newIndex++;
+          } else {
+            newIndex--;
+          }
+        }
+
+        let mutatedChar = mutationSet[newIndex];
+
+        color = color.substr(0, index) + mutatedChar + color.substr(index + 1);
+        return color;
+      }
+
+      function evolveNextGeneration(colors) {
+        // evaluate each of the colors
+        colors.forEach(function (color, count) {
+          color.fitness = 0;
+          for (var i = 1; i < color.value.length; i++) {
+            let red = parseInt(color.value.substring(1, 3), 16);
+            let green = parseInt(color.value.substring(3, 5), 16);
+            let blue = parseInt(color.value.substring(5), 16);
+
+            targetRed, targetGreen, (targetBlue = get_target());
+
+            color.fitness =
+              Math.abs(targetRed - red) +
+              Math.abs(targetGreen - green) +
+              Math.abs(targetBlue - blue);
+          }
+        });
+
+        // create a combined pool (current pop + children of mutated parents)
+        colors.sort(function (a, b) {
+          return a.fitness - b.fitness;
+        });
+
+        console.log(colors);
+        var combinedPool = copy(colors);
+        for (var i = 0; i < colors.length; i++) {
+          if (i < 72) {
+            var parent = colors[i];
+
+            parent.value = mutate(parent.value);
+            combinedPool.push(parent);
+          }
+        }
+
+        // use the best individuals from the combined pool to form the next gens population
+        combinedPool.sort(function (a, b) {
+          return a.fitness - b.fitness;
+        });
+        for (var i = 0; i < colors.length; i++) {
+          colors[i] = combinedPool[i];
+        }
+
+        return colors;
+      }
+
+      function copy(o) {
+        var output, v, key;
+        output = Array.isArray(o) ? [] : {};
+        for (key in o) {
+          v = o[key];
+          output[key] = typeof v === "object" ? copy(v) : v;
+        }
+        return output;
+      }
+
+      function SETUP_CANVAS(options) {
+        if (!options) {
+          console.error("No options provided to SETUP_CANVAS");
+          return;
+        }
+
+        if (!canvas || !options.canvas.getContext) {
+          console.error("No canvas, we're in for a bad time...");
+          return;
+        }
+
+        let width = options.width || window.innerWidth;
+        let height = options.height || window.innerHeight;
+
+        let ctx = options.canvas.getContext("2d");
+
+        ctx.canvas.width = width;
+        ctx.canvas.height = height;
+
+        ctx.fillStyle = options.bgColor || "#f1f1f1";
+        ctx.fillRect(0, 0, width, height);
+        return ctx;
+      }
+    </script>
+  </body>
+</html>
